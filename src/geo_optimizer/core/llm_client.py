@@ -83,6 +83,7 @@ def query_llm(
     api_key: str | None = None,
     model: str | None = None,
     max_tokens: int = 1024,
+    user_country: str | None = None,
 ) -> LLMResponse:
     """Send a prompt to an LLM and return the response.
 
@@ -93,6 +94,9 @@ def query_llm(
         api_key: API key (auto-detected if not set).
         model: Model name (provider default if not set).
         max_tokens: Maximum response tokens.
+        user_country: ISO 3166-1 alpha-2 code geolocating the web search behind the
+            answer. Only Perplexity grounds in live search, so only it receives this;
+            without it Sonar guesses a market from the query language alone.
 
     Returns:
         LLMResponse with text and metadata, or error if unavailable.
@@ -122,7 +126,14 @@ def query_llm(
     if provider == "groq":
         return _query_groq(prompt, system=system, api_key=api_key, model=model, max_tokens=max_tokens)
     if provider == "perplexity":
-        return _query_perplexity(prompt, system=system, api_key=api_key, model=model, max_tokens=max_tokens)
+        return _query_perplexity(
+            prompt,
+            system=system,
+            api_key=api_key,
+            model=model,
+            max_tokens=max_tokens,
+            user_country=user_country,
+        )
 
     return LLMResponse(error=f"Unknown provider: {provider}")
 
@@ -183,7 +194,15 @@ def _query_anthropic(prompt: str, *, system: str, api_key: str, model: str, max_
         return LLMResponse(error=f"{type(exc).__name__}: {exc}", provider="anthropic", model=model)
 
 
-def _query_perplexity(prompt: str, *, system: str, api_key: str, model: str, max_tokens: int) -> LLMResponse:
+def _query_perplexity(
+    prompt: str,
+    *,
+    system: str,
+    api_key: str,
+    model: str,
+    max_tokens: int,
+    user_country: str | None = None,
+) -> LLMResponse:
     """Query Perplexity Sonar via plain HTTP (OpenAI-compatible, returns web citations)."""
     import requests
 
@@ -192,11 +211,15 @@ def _query_perplexity(prompt: str, *, system: str, api_key: str, model: str, max
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
+    body: dict = {"model": model, "messages": messages, "max_tokens": max_tokens}
+    if user_country:
+        body["web_search_options"] = {"user_location": {"country": user_country}}
+
     try:
         resp = requests.post(
             _PERPLEXITY_API_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": messages, "max_tokens": max_tokens},
+            json=body,
             timeout=_LLM_TIMEOUT,
         )
         resp.raise_for_status()

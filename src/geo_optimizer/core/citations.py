@@ -88,6 +88,8 @@ def run_citation_check(
     queries: list[str] | None = None,
     provider: str | None = None,
     api_key: str | None = None,
+    system: str = "",
+    user_country: str | None = None,
 ) -> CitationCheckResult:
     """Ask an AI answer engine customer-style questions and check brand/domain visibility.
 
@@ -98,6 +100,9 @@ def run_citation_check(
         queries: Custom queries; overrides the default templates.
         provider: LLM provider (resolved via resolve_provider if not set).
         api_key: API key (resolved from environment if not set).
+        system: Optional system message sent with every query (e.g. brand disambiguation).
+        user_country: Optional ISO 3166-1 alpha-2 code to geolocate the engine's web
+            search (Perplexity only; other providers ignore it).
 
     Returns:
         CitationCheckResult with per-query entries and aggregate rates.
@@ -129,7 +134,13 @@ def run_citation_check(
     cited_count = 0
 
     for query_text in query_list:
-        response = query_llm(query_text, provider=provider, api_key=api_key)
+        response = query_llm(
+            query_text,
+            system=system,
+            provider=provider,
+            api_key=api_key,
+            user_country=user_country,
+        )
         if response.error:
             entries.append(CitationCheckEntry(query=query_text, platform=provider, error=response.error))
             continue
@@ -156,6 +167,7 @@ def run_citation_check(
                 domain_cited=domain_cited,
                 cited_sources=list(response.citations),
                 snippet=response.text[:_SNIPPET_LEN],
+                answer_text=response.text,
             )
         )
 

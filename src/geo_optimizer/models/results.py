@@ -771,6 +771,9 @@ class CitationCheckEntry:
     domain_cited: bool = False
     cited_sources: list[str] = field(default_factory=list)  # source URLs from the answer
     snippet: str = ""
+    # Full answer text. `snippet` stays for existing consumers; reports that quote the
+    # answer need more than its fixed 200-character cut.
+    answer_text: str = ""
     error: str | None = None
 
 
