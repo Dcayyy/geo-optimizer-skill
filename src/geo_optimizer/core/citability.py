@@ -570,7 +570,13 @@ def detect_easy_to_understand(soup) -> MethodScore:
 def detect_unique_words(soup, clean_text: str | None = None) -> MethodScore:
     """Calculate Type-Token Ratio to estimate vocabulary richness."""
     body_text = (clean_text or _get_clean_text(soup)).lower()
-    words = [w for w in re.findall(r"\b[a-zA-Zà-ú]{4,}\b", body_text) if w not in _STOP_WORDS]
+    # Same reason as the stuffing detector: a Latin-only class measures the vocabulary
+    # richness of the English fragments on a non-Latin page rather than of the page.
+    words = [
+        w
+        for w in re.findall(r"\b[^\W\d_]{4,}\b", body_text, re.UNICODE)
+        if w not in _STOP_WORDS
+    ]
 
     if len(words) < 50:
         return MethodScore(name="unique_words", label="Unique Words", max_score=3, impact="+7%")
@@ -608,7 +614,11 @@ def detect_unique_words(soup, clean_text: str | None = None) -> MethodScore:
 def detect_keyword_stuffing(soup, clean_text: str | None = None) -> MethodScore:
     """Detect keyword stuffing that penalizes AI visibility."""
     body_text = (clean_text or _get_clean_text(soup)).lower()
-    words = re.findall(r"\b[a-zA-Zà-ú]{3,}\b", body_text)
+    # Letters in any script, not just Latin. `[a-zA-Zà-ú]` cannot see Cyrillic, Greek or
+    # Hebrew, so on a Bulgarian page the denominator collapsed to the handful of English
+    # words present and every one of them looked stuffed: 12 uses of "custom" among 2,459
+    # words was reported as 5.5% density because only 217 words were counted.
+    words = re.findall(r"\b[^\W\d_]{3,}\b", body_text, re.UNICODE)
 
     if len(words) < 50:
         # Text too short for meaningful analysis
