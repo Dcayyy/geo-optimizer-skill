@@ -9,7 +9,12 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from geo_optimizer.models.config import ABOUT_LINK_PATTERNS, BRAND_LEGAL_SUFFIXES, KG_PILLAR_DOMAINS
+from geo_optimizer.models.config import (
+    ABOUT_LINK_PATTERNS,
+    BRAND_LEGAL_SUFFIXES,
+    INDUSTRY_CITATION_DOMAINS,
+    KG_PILLAR_DOMAINS,
+)
 from geo_optimizer.models.results import BrandEntityResult, ContentResult, MetaResult, SchemaResult
 
 if TYPE_CHECKING:
@@ -183,6 +188,15 @@ def audit_brand_entity(
             result.has_crunchbase,
         ]
     )
+
+    # Counted in its own pass, and never added to the pillar count above. A directory listing
+    # corroborates a company; it does not anchor its entity, and conflating the two would
+    # report a stronger Knowledge Graph presence than exists.
+    for url in schema_result.sameas_urls:
+        url_lower = url.lower()
+        if any(domain in url_lower for domain in INDUSTRY_CITATION_DOMAINS):
+            result.industry_citation_urls.append(url)
+    result.industry_citation_count = len(result.industry_citation_urls)
 
     # ── 3. About/Contact Signals ─────────────────────────────────
     # Look for /about link in the page

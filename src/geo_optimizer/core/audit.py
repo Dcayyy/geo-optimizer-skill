@@ -206,9 +206,34 @@ def build_recommendations(
                 "for Knowledge Graph disambiguation"
             )
         elif brand_entity.kg_pillar_count < 3:
+            # Name what is missing rather than the whole set, and say plainly when the gap is
+            # one nobody can close: Wikipedia needs notability, so telling a small business to
+            # "add more pillars" is advice they cannot act on and will read again every month.
+            missing = [
+                name
+                for name, present in (
+                    ("Wikidata", brand_entity.has_wikidata),
+                    ("LinkedIn", brand_entity.has_linkedin),
+                    ("Crunchbase", brand_entity.has_crunchbase),
+                )
+                if not present
+            ]
+            if missing:
+                _m_brand.append(
+                    f"Add sameAs links for {', '.join(missing)} to Organization schema "
+                    f"(Knowledge Graph anchors: {brand_entity.kg_pillar_count}/4). "
+                    "Wikipedia is the fourth and needs an article that meets its notability "
+                    "bar, so it is out of reach for most businesses."
+                )
+            elif not brand_entity.has_wikipedia:
+                _m_brand.append(
+                    "Knowledge Graph anchors: 3/4. Only Wikipedia is missing, which needs an "
+                    "article meeting its notability bar — treat this as reached."
+                )
+        if brand_entity.industry_citation_count == 0:
             _m_brand.append(
-                f"Add more sameAs links to Knowledge Graph pillars "
-                f"(currently {brand_entity.kg_pillar_count}/4: Wikipedia, Wikidata, LinkedIn, Crunchbase)"
+                "No industry directory in sameAs. A listing on a recognised directory for your "
+                "sector corroborates the company where a Knowledge Graph anchor cannot."
             )
         if not brand_entity.has_about_link:
             _m_brand.append("Add a visible /about or /chi-siamo link to build trust signals for AI")

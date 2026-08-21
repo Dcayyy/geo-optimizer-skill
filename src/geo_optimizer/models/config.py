@@ -548,6 +548,28 @@ KG_PILLAR_DOMAINS = {
     "crunchbase.com",
 }
 
+# Industry directories that corroborate a company without anchoring its entity.
+#
+# Deliberately NOT merged into KG_PILLAR_DOMAINS. Wikipedia and Wikidata are ingested into
+# the Knowledge Graph directly and LinkedIn/Crunchbase are its standard company
+# corroborators; a review directory is a citation, not an entity anchor, and folding them in
+# would raise the pillar count without the signal it names having improved.
+#
+# Measured separately because the pillar count is unreachable for most small businesses —
+# Wikipedia needs notability and Crunchbase is US-startup shaped — so a report that offers
+# only that number gives a client nothing they can act on. This one they can.
+INDUSTRY_CITATION_DOMAINS = {
+    "clutch.co",
+    "goodfirms.co",
+    "sortlist.com",
+    "techbehemoths.com",
+    "themanifest.com",
+    "designrush.com",
+    "g2.com",
+    "trustpilot.com",
+    "capterra.com",
+}
+
 # ─── Prompt Injection Detection (#276) ────────────────────────────────────────
 
 # Regex patterns for direct LLM instructions in page content

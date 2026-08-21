@@ -107,7 +107,12 @@ def audit_schema(soup: BeautifulSoup | None, url: str) -> SchemaResult:
                     same_as = [same_as]
                 if same_as:
                     result.has_sameas = True
-                    result.sameas_urls.extend(same_as[:10])  # cap at 10
+                    # Raised from 10. The cap was a payload guard, but every downstream
+                    # check reads this list, so truncation silently deletes evidence: a site
+                    # citing eleven profiles had its eleventh ignored, and had Crunchbase
+                    # been in that position the audit would have reported it missing while
+                    # it sat in the schema. sameAs lists are short; 50 is past any real one.
+                    result.sameas_urls.extend(same_as[:50])
 
                 # Check dateModified
                 if schema.get("dateModified"):

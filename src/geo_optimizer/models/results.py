@@ -177,6 +177,11 @@ class BrandEntityResult:
     has_linkedin: bool = False
     has_crunchbase: bool = False
 
+    # Industry citations — corroboration a small business can actually obtain, kept apart
+    # from the pillar count so neither number flatters the other.
+    industry_citation_count: int = 0
+    industry_citation_urls: list[str] = field(default_factory=list)
+
     # About/Contact Signals (2 points)
     has_about_link: bool = False
     has_contact_info: bool = False  # Organization with address/telephone/email or Person with jobTitle
