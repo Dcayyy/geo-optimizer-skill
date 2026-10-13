@@ -7,8 +7,11 @@ Zero HTTP fetches — works only on already-available data.
 
 from __future__ import annotations
 
+import copy
 import re
 from collections import Counter
+
+from bs4 import Comment, Doctype
 
 from geo_optimizer.models.config import (
     BOILERPLATE_RATIO_THRESHOLD,
@@ -17,6 +20,49 @@ from geo_optimizer.models.config import (
     MIXED_SIGNALS_WORD_THRESHOLD,
 )
 from geo_optimizer.models.results import ContentResult, MetaResult, NegativeSignalsResult, SchemaResult
+
+#: Elements whose text is code, page chrome or a form control rather than prose.
+_NON_PROSE_TAGS = [
+    "script",
+    "style",
+    "noscript",
+    "template",
+    "nav",
+    "footer",
+    "header",
+    "button",
+    "select",
+    "option",
+    "label",
+    "textarea",
+]
+
+
+def _prose_words(soup) -> list[str]:
+    """Words of the page's readable prose, in any script, each text block counted once.
+
+    `[a-zA-ZÀ-ÿ]` cannot match Cyrillic, so a Bulgarian page was measured on its English
+    fragments alone: kvant.bg read "kvant" at 9.7% and cognitex-solutions.com/bg "google"
+    at 12.0%, both under 1.2% of the prose. Page chrome and form controls are dropped, and
+    identical blocks count once, because a badge or a button label repeated on every card
+    is a template, not writing (jotis.bg's add-to-cart buttons put "добави" at 6.9%).
+    """
+    working = copy.deepcopy(soup)
+    for tag in working(_NON_PROSE_TAGS):
+        tag.decompose()
+    for tag in working.select('[role="button"]'):
+        tag.decompose()
+    seen: set[str] = set()
+    words: list[str] = []
+    for node in working.find_all(string=True):
+        if isinstance(node, (Comment, Doctype)):
+            continue
+        block = " ".join(node.split()).lower()
+        if not block or block in seen:
+            continue
+        seen.add(block)
+        words.extend(re.findall(r"\b[^\W\d_]{4,}\b", block))
+    return words
 
 
 def audit_negative_signals(
@@ -159,18 +205,25 @@ def audit_negative_signals(
         "non",
         "i",
     }
-    words = re.findall(r"\b[a-zA-ZÀ-ÿ]{4,}\b", text.lower())
+    words = _prose_words(soup)
     if len(words) > 50:
         freq = Counter(w for w in words if w not in stop_words)
         total = len(words)
-        for word, count in freq.most_common(3):
-            density = count / total
-            # Single-word density above threshold (SEMrush 2025: > 2.5%) = stuffing
-            if density > KEYWORD_STUFFING_THRESHOLD and count >= 5:
-                result.has_keyword_stuffing = True
-                result.stuffed_word = word
-                result.stuffed_density = round(density * 100, 1)
-                break
+        # Words above the threshold (SEMrush 2025: > 2.5%), most frequent first.
+        over = [
+            (word, count / total)
+            for word, count in freq.most_common(5)
+            if count / total > KEYWORD_STUFFING_THRESHOLD and count >= 5
+        ]
+        # Stuffing is one word far above the line, or several words above it. A single
+        # core term a little over it is how a short page about one service reads:
+        # "епилация" is 3.0% of beautykarima.com and "наем" 2.8% of kvant.bg.
+        heavy = [item for item in over if item[1] > 2 * KEYWORD_STUFFING_THRESHOLD]
+        if heavy or len(over) >= 2:
+            word, density = (heavy or over)[0]
+            result.has_keyword_stuffing = True
+            result.stuffed_word = word
+            result.stuffed_density = round(density * 100, 1)
 
     # ── 6. Missing author signal ─────────────────────────────────
     # Look for Person schema

@@ -16,6 +16,71 @@ def _meta():
     return MetaResult(has_title=True, title_text="Test", description_text="Test description")
 
 
+#: Sixty distinct Bulgarian words of four letters or more, so each one's share is known.
+_BG_WORDS = [
+    "сцена",
+    "екип",
+    "зала",
+    "концерт",
+    "събитие",
+    "светлина",
+    "картина",
+    "звук",
+    "монтаж",
+    "техник",
+    "програма",
+    "публика",
+    "размер",
+    "стъпка",
+    "яркост",
+    "пиксел",
+    "договор",
+    "оферта",
+    "клиент",
+    "проект",
+    "платформа",
+    "решение",
+    "качество",
+    "гаранция",
+    "доставка",
+    "поръчка",
+    "камион",
+    "склад",
+    "кабел",
+    "процесор",
+    "софтуер",
+    "модул",
+    "панел",
+    "рамка",
+    "конструкция",
+    "сигнал",
+    "резерв",
+    "график",
+    "репетиция",
+    "декор",
+    "фасада",
+    "изложение",
+    "конференция",
+    "фестивал",
+    "стадион",
+    "площад",
+    "арена",
+    "театър",
+    "студио",
+    "продукция",
+    "реклама",
+    "марка",
+    "партньор",
+    "опит",
+    "години",
+    "град",
+    "улица",
+    "офис",
+    "телефон",
+    "адрес",
+]
+
+
 class TestNegativeSignals:
     def test_clean_page(self):
         """Pagina pulita → severity clean."""
@@ -69,6 +134,61 @@ class TestNegativeSignals:
         result = audit_negative_signals(soup, html, _content(word_count=60), _meta(), SchemaResult())
         assert result.has_keyword_stuffing is True
         assert result.stuffed_word == "optimization"
+
+    def test_keyword_stuffing_counts_cyrillic_prose(self):
+        """A Latin brand name on a Bulgarian page is measured against the whole page.
+
+        kvant.bg was reported at 9.7% for "kvant" because only its Latin words were counted.
+        """
+        english = " ".join(f"term{chr(97 + i // 26)}{chr(97 + i % 26)}" for i in range(50))
+        kvant = " ".join(["KVANT"] * 6)
+        html = (
+            "<html><body><main>"
+            f"<p>{' '.join(_BG_WORDS)} {kvant}</p><p>{' '.join(reversed(_BG_WORDS))} {english}</p>"
+            "</main></body></html>"
+        )
+        soup = BeautifulSoup(html, "html.parser")
+        result = audit_negative_signals(soup, html, _content(), _meta(), SchemaResult())
+        assert result.has_keyword_stuffing is False
+
+    def test_keyword_stuffing_ignores_repeated_card_labels(self):
+        """A badge or button repeated on every product card is a template, not prose."""
+        card = "<div class='card'><span>Безплатна доставка</span><button>Добави в количката</button></div>"
+        html = (
+            "<html><body><main>"
+            f"<p>{' '.join(_BG_WORDS)}</p><p>{' '.join(reversed(_BG_WORDS))}</p>{card * 15}"
+            "</main></body></html>"
+        )
+        soup = BeautifulSoup(html, "html.parser")
+        result = audit_negative_signals(soup, html, _content(), _meta(), SchemaResult())
+        assert result.has_keyword_stuffing is False
+
+    def test_keyword_stuffing_flags_bulgarian_stuffing(self):
+        """Real stuffing is still caught in Cyrillic."""
+        prose = " ".join(f"{word} гуми" if i % 5 == 0 else word for i, word in enumerate(_BG_WORDS))
+        html = f"<html><body><main><p>{prose}</p></main></body></html>"
+        soup = BeautifulSoup(html, "html.parser")
+        result = audit_negative_signals(soup, html, _content(), _meta(), SchemaResult())
+        assert result.has_keyword_stuffing is True
+        assert result.stuffed_word == "гуми"
+
+    def test_single_core_term_a_little_over_the_line_is_not_stuffing(self):
+        """One service word at about 4% is how a short page about that service reads."""
+        prose = f"{' '.join(_BG_WORDS)} {' '.join(['епилация'] * 5)} {' '.join(reversed(_BG_WORDS))}"
+        html = f"<html><body><main><p>{prose}</p></main></body></html>"
+        soup = BeautifulSoup(html, "html.parser")
+        result = audit_negative_signals(soup, html, _content(), _meta(), SchemaResult())
+        assert result.has_keyword_stuffing is False
+
+    def test_two_terms_over_the_line_are_stuffing(self):
+        """Several words above the threshold at once still read as over-optimised."""
+        extra = " ".join(["наем", "екрани"] * 5)
+        prose = f"{' '.join(_BG_WORDS)} {extra} {' '.join(reversed(_BG_WORDS))}"
+        html = f"<html><body><main><p>{prose}</p></main></body></html>"
+        soup = BeautifulSoup(html, "html.parser")
+        result = audit_negative_signals(soup, html, _content(), _meta(), SchemaResult())
+        assert result.has_keyword_stuffing is True
+        assert result.stuffed_word in {"наем", "екрани"}
 
     def test_author_from_schema(self):
         """Person schema → has_author_signal."""
